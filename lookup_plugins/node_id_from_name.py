@@ -1,12 +1,9 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
-from ansible.errors import AnsibleError
-from ansible.module_utils.six.moves.urllib.error import HTTPError, URLError
-from ansible.module_utils._text import to_text, to_native
-from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
 from ansible.plugins.lookup import LookupBase
 import requests
 import json
+
 
 
 DOCUMENTATION = """
@@ -55,13 +52,15 @@ def _headers(url, username, password, verify=False):
 
     headers = {'content-type': 'application/json'}
     url = "{}/api/aaaLogin.json".format(url)
+
     response = requests.post(url,
                              data=json.dumps(payload),
                              headers=headers,
                              verify=verify)
 
+
     token = response.json()['imdata'][0]['aaaLogin']['attributes']['token']
-    headers['Cookie'] = "APIC-Cookie={}".format(token)
+    headers['Cookie'] = response.headers['Set-Cookie']
     return headers
 
 
@@ -77,11 +76,14 @@ class LookupModule(LookupBase):
         username = provider['username']
         password = provider['password']
         ret = []
+        # Disable InsecureRequestWarning
+        import urllib3
+        urllib3.disable_warnings()
+
         headers = _headers(url,
                            username,
                            password,
                            verify=False)
-        print(headers)
         base_url = "{}/api/node/class/fabricNode.json".format(url)
         query_parm = '?query-target-filter=' \
                      'and(eq(fabricNode.name,"{}"))'.format(node_name)
@@ -89,7 +91,6 @@ class LookupModule(LookupBase):
         resp = requests.get(url,
                             headers=headers,
                             verify=False).json()
-        print(resp)
         if int(resp['totalCount']) == 1:
             ret.append(resp['imdata'][0]['fabricNode']['attributes']['id'])
         return ret
